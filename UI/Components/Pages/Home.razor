@@ -17,10 +17,13 @@
     <button @onclick="ResetSimulation" disabled="@IsPlaying">Reset</button>
 </div>
 
-<div style="font-family: monospace; margin-bottom: 0.5rem; display: flex; gap: 2rem;">
+<div style="font-family: monospace; margin-bottom: 0.5rem; display: flex; gap: 2rem; flex-wrap: wrap;">
     <span>Tempo: @currentTime.ToString("F2") s</span>
     <span style="color: @(CFL > 0.5 ? "red" : "green"); font-weight: bold;">
         CFL (r): @CFL.ToString("F3") @(CFL > 0.5 ? " (Instável!)" : " (Estável)")
+    </span>
+    <span style="color: #0078D7; font-weight: bold;">
+        Temp. Meio: @(GetCenterTemperature().ToString("F2")) °C
     </span>
 </div>
 
@@ -91,5 +94,21 @@
             StateHasChanged();
             await Task.Delay(16);
         }
+    }
+
+    private double GetCenterTemperature()
+    {
+        if (T.Length == 0) return 0;
+    
+        int mid = T.Length / 2;
+    
+        // Se for par, faz a média espacial dos dois nós adjacentes ao centro
+        if (T.Length % 2 == 0)
+        {
+            return (T[mid - 1] + T[mid]) / 2.0;
+        }
+    
+        // Se for ímpar, o centro físico cai exatamente em cima de um nó
+        return T[mid];
     }
 }
