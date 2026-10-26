@@ -1,5 +1,6 @@
 ﻿@page "/"
 @using HeatDiffusion1D.Solver
+@using ScottPlot.Blazor
 @rendermode InteractiveServer
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; max-width: 800px; margin-bottom: 1rem; font-family: sans-serif; font-size: 0.9rem;">
@@ -28,7 +29,7 @@
 </div>
 
 <!-- Representação da barra 1D -->
-<div style="display: flex; width: 100%; height: 50px; border: 1px solid #333;">
+<div style="display: flex; width: 100%; height: 50px; border: 1px solid #333; margin-bottom: 1rem;">
     @for (int i = 0; i < T.Length; i++)
     {
         var fraction = Math.Clamp(T[i] / 100.0, 0, 1);
@@ -39,40 +40,76 @@
     }
 </div>
 
+<!-- Gráfico do Mid Point (Renderizado no Servidor via Base64) -->
+<div style="width: 100%; height: 350px; text-align: center; margin-bottom: 1rem;">
+    @if (!string.IsNullOrEmpty(plotImageSource))
+    {
+        <img src="@plotImageSource" style="max-width: 100%; height: 100%; object-fit: contain;" />
+    }
+</div>
+
 @code {
     private bool IsPlaying = false;
     private double currentTime = 0;
     private double[] T = Array.Empty<double>();
     private double[] TBuffer = Array.Empty<double>();
 
-    // UI Variables (Valores padrão simulando aço carbono genérico)
+    // Variáveis para o Gráfico
+    private string plotImageSource = "";
+    private ScottPlot.Plot myPlot = new();
+    private ScottPlot.Plottables.DataLogger midPointLogger;
+
     private int nodes = 50;
     private double rodLength = 1.0;
-    private double conductivity = 45.0; // k
-    private double density = 7800.0;    // rho
-    private double specificHeat = 470.0; // cp
+    private double conductivity = 45.0;
+    private double density = 7800.0;
+    private double specificHeat = 470.0;
     private double dt = 0.5;
     private int stepsPerFrame = 10;
 
-    // Propriedades calculadas on-the-fly
     private double Alpha => conductivity / (density * specificHeat);
     private double Dx => rodLength / nodes;
     private double CFL => Alpha * dt / (Dx * Dx);
 
     protected override void OnInitialized()
     {
-        ResetSimulation();
+        // Configuração inicial do gráfico
+        midPointLogger = myPlot.Add.DataLogger();
+        midPointLogger.Color = new ScottPlot.Color(0, 120, 215);
+
+        myPlot.Title("Evolução da Temperatura no Centro da Barra");
+        myPlot.XLabel("Tempo (s)");
+        myPlot.YLabel("Temperatura (°C)");
+
+        ResetSimulationState();
+        UpdatePlotImage();
     }
 
     private void ResetSimulation()
+    {
+        ResetSimulationState();
+
+        midPointLogger.Clear();
+        midPointLogger.Add(currentTime, GetCenterTemperature());
+        myPlot.Axes.AutoScale();
+        UpdatePlotImage();
+    }
+
+    private void ResetSimulationState()
     {
         T = new double[nodes];
         TBuffer = new double[nodes];
         currentTime = 0;
 
-        // Estado inicial
         Array.Fill(T, 0);
-        T[0] = 100; // Dirichlet boundary condition (ponta quente)
+        T[0] = 100;
+    }
+
+    private void UpdatePlotImage()
+    {
+        // Gera a imagem no servidor e converte para Base64
+        byte[] imageBytes = myPlot.GetImageBytes(600, 350, ScottPlot.ImageFormat.Png);
+        plotImageSource = $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}";
     }
 
     private async Task TogglePlay()
@@ -81,7 +118,6 @@
 
         while (IsPlaying)
         {
-            // Aborta se a matemática explodir para não travar a thread
             if (CFL > 0.5)
             {
                 IsPlaying = false;
@@ -91,24 +127,31 @@
             HeatSolver.Evolve(T, TBuffer, Alpha, Dx, dt, stepsPerFrame);
             currentTime += dt * stepsPerFrame;
 
+            // Adiciona o novo ponto
+            midPointLogger.Add(currentTime, GetCenterTemperature());
+
+            // Atualiza a imagem convertida
+            UpdatePlotImage();
+
             StateHasChanged();
-            await Task.Delay(16);
+
+            // Aumentei ligeiramente o atraso para dar folga ao servidor
+            // devido à conversão para Base64 a cada frame
+            await Task.Delay(30);
         }
     }
 
     private double GetCenterTemperature()
     {
         if (T.Length == 0) return 0;
-    
+
         int mid = T.Length / 2;
-    
-        // Se for par, faz a média espacial dos dois nós adjacentes ao centro
+
         if (T.Length % 2 == 0)
         {
             return (T[mid - 1] + T[mid]) / 2.0;
         }
-    
-        // Se for ímpar, o centro físico cai exatamente em cima de um nó
+
         return T[mid];
     }
 }

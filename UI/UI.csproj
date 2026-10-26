@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ScottPlot.Blazor" Version="5.1.59" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\HeatDiffusion1D.Solver\HeatDiffusion1D.Solver.csproj" />
   </ItemGroup>
 
