@@ -1,0 +1,43 @@
+﻿@page "/"
+@using HeatDiffusion1D.Solver
+@rendermode InteractiveServer
+
+<button style="margin-bottom: 1rem;" @onclick="TogglePlay">@(IsPlaying ? "Stop" : "Play")</button>
+
+<!-- Representação da barra 1D -->
+<div style="display: flex; width: 100%; height: 50px; border: 1px solid #333;">
+    @for (int i = 0; i < T.Length; i++)
+    {
+        // Normaliza a temperatura entre 0 (Azul) e 100 (Vermelho)
+        var fraction = Math.Clamp(T[i] / 100.0, 0, 1);
+        var r = (int)(255 * fraction);
+        var b = (int)(255 * (1 - fraction));
+
+        <div style="flex: 1; background-color: rgb(@r, 0, @b); height: 100%;"></div>
+    }
+</div>
+
+@code {
+    private double[] T = new double[50];
+    private double[] TBuffer = new double[50];
+    private bool IsPlaying = false;
+
+    protected override void OnInitialized()
+    {
+        // Estado inicial: a barra toda fria (0), exceto a ponta esquerda quente (100)
+        Array.Fill(T, 0);
+        T[0] = 100;
+    }
+
+    private async Task TogglePlay()
+    {
+        IsPlaying = !IsPlaying;
+
+        while (IsPlaying)
+        {
+            HeatSolver.Evolve(T, TBuffer, alpha: 0.5, dx: 1.0, dt: 0.1, timeSteps: 1);
+            StateHasChanged();
+            await Task.Delay(16);
+        }
+    }
+}

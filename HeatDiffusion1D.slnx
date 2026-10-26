@@ -1,3 +1,5 @@
 <Solution>
-  <Project Path="HeatDiffusion1D.csproj" />
+  <Project Path="HeatDiffusion1D.Solver/HeatDiffusion1D.Solver.csproj" />
+  <Project Path="HeatDiffusion1D.Tests/HeatDiffusion1D.Tests.csproj" />
+  <Project Path="UI/UI.csproj" Id="61eb3369-571b-48ff-a082-794a5b0ce23f" />
 </Solution>
