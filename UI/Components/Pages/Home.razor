@@ -2,13 +2,32 @@
 @using HeatDiffusion1D.Solver
 @rendermode InteractiveServer
 
-<button style="margin-bottom: 1rem;" @onclick="TogglePlay">@(IsPlaying ? "Stop" : "Play")</button>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; max-width: 800px; margin-bottom: 1rem; font-family: sans-serif; font-size: 0.9rem;">
+    <label>Nodes (Array Size): <br /><input type="number" @bind="nodes" min="3" max="500" disabled="@IsPlaying" /></label>
+    <label>Rod Length (m): <br /><input type="number" @bind="rodLength" step="0.1" /></label>
+    <label>Conductivity (W/m·K): <br /><input type="number" @bind="conductivity" step="10" /></label>
+    <label>Density (kg/m³): <br /><input type="number" @bind="density" step="100" /></label>
+    <label>Specific Heat (J/kg·K): <br /><input type="number" @bind="specificHeat" step="50" /></label>
+    <label>Time Step dt (s): <br /><input type="number" @bind="dt" step="0.01" /></label>
+    <label>Steps/Frame: <br /><input type="number" @bind="stepsPerFrame" min="1" /></label>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <button @onclick="TogglePlay">@(IsPlaying ? "Stop" : "Play")</button>
+    <button @onclick="ResetSimulation" disabled="@IsPlaying">Reset</button>
+</div>
+
+<div style="font-family: monospace; margin-bottom: 0.5rem; display: flex; gap: 2rem;">
+    <span>Tempo: @currentTime.ToString("F2") s</span>
+    <span style="color: @(CFL > 0.5 ? "red" : "green"); font-weight: bold;">
+        CFL (r): @CFL.ToString("F3") @(CFL > 0.5 ? " (Instável!)" : " (Estável)")
+    </span>
+</div>
 
 <!-- Representação da barra 1D -->
 <div style="display: flex; width: 100%; height: 50px; border: 1px solid #333;">
     @for (int i = 0; i < T.Length; i++)
     {
-        // Normaliza a temperatura entre 0 (Azul) e 100 (Vermelho)
         var fraction = Math.Clamp(T[i] / 100.0, 0, 1);
         var r = (int)(255 * fraction);
         var b = (int)(255 * (1 - fraction));
@@ -18,15 +37,39 @@
 </div>
 
 @code {
-    private double[] T = new double[50];
-    private double[] TBuffer = new double[50];
     private bool IsPlaying = false;
+    private double currentTime = 0;
+    private double[] T = Array.Empty<double>();
+    private double[] TBuffer = Array.Empty<double>();
+
+    // UI Variables (Valores padrão simulando aço carbono genérico)
+    private int nodes = 50;
+    private double rodLength = 1.0;
+    private double conductivity = 45.0; // k
+    private double density = 7800.0;    // rho
+    private double specificHeat = 470.0; // cp
+    private double dt = 0.5;
+    private int stepsPerFrame = 10;
+
+    // Propriedades calculadas on-the-fly
+    private double Alpha => conductivity / (density * specificHeat);
+    private double Dx => rodLength / nodes;
+    private double CFL => Alpha * dt / (Dx * Dx);
 
     protected override void OnInitialized()
     {
-        // Estado inicial: a barra toda fria (0), exceto a ponta esquerda quente (100)
+        ResetSimulation();
+    }
+
+    private void ResetSimulation()
+    {
+        T = new double[nodes];
+        TBuffer = new double[nodes];
+        currentTime = 0;
+
+        // Estado inicial
         Array.Fill(T, 0);
-        T[0] = 100;
+        T[0] = 100; // Dirichlet boundary condition (ponta quente)
     }
 
     private async Task TogglePlay()
@@ -35,7 +78,16 @@
 
         while (IsPlaying)
         {
-            HeatSolver.Evolve(T, TBuffer, alpha: 0.5, dx: 1.0, dt: 0.1, timeSteps: 1);
+            // Aborta se a matemática explodir para não travar a thread
+            if (CFL > 0.5)
+            {
+                IsPlaying = false;
+                break;
+            }
+
+            HeatSolver.Evolve(T, TBuffer, Alpha, Dx, dt, stepsPerFrame);
+            currentTime += dt * stepsPerFrame;
+
             StateHasChanged();
             await Task.Delay(16);
         }
